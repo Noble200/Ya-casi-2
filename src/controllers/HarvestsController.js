@@ -1,4 +1,4 @@
-// src/controllers/HarvestsController.js - Controlador con la lógica para las cosechas
+// src/controllers/HarvestsController.js - Actualizado con gestión de productos
 import { useState, useEffect, useCallback } from 'react';
 import { useHarvests } from '../contexts/HarvestContext';
 import { useStock } from '../contexts/StockContext';
@@ -17,9 +17,14 @@ const useHarvestsController = () => {
   
   const {
     fields,
+    products,
+    warehouses,
     loading: fieldsLoading,
     error: fieldsError,
     loadFields,
+    loadProducts,
+    loadWarehouses,
+    updateProduct
   } = useStock();
 
   // Estados locales
@@ -39,23 +44,23 @@ const useHarvestsController = () => {
   const [error, setError] = useState('');
   const [filteredHarvestsList, setFilteredHarvestsList] = useState([]);
 
-  // Cargar campos y cosechas al iniciar
+  // Cargar campos, productos y cosechas al iniciar
   const loadData = useCallback(async () => {
     try {
       setError('');
       
-      // Cargar campos si no están cargados
-      if (fields.length === 0) {
-        await loadFields();
-      }
-      
-      // Cargar cosechas
-      await loadHarvests();
+      // Cargar todos los datos necesarios
+      await Promise.all([
+        loadFields(),
+        loadProducts(),
+        loadWarehouses(),
+        loadHarvests()
+      ]);
     } catch (err) {
       console.error('Error al cargar datos:', err);
       setError('Error al cargar datos: ' + err.message);
     }
-  }, [loadFields, loadHarvests, fields.length]);
+  }, [loadFields, loadProducts, loadWarehouses, loadHarvests]);
 
   // Actualizar estado de carga y error
   useEffect(() => {
@@ -207,15 +212,50 @@ const useHarvestsController = () => {
     }
   }, [deleteHarvest, selectedHarvest]);
 
+  // Función para actualizar stock de productos cosechados
+  const updateProductStock = useCallback(async (productsToHarvest) => {
+    try {
+      if (!productsToHarvest || productsToHarvest.length === 0) {
+        return;
+      }
+
+      // Actualizar cada producto
+      for (const productHarvest of productsToHarvest) {
+        const product = products.find(p => p.id === productHarvest.id);
+        if (product && productHarvest.quantityToHarvest > 0) {
+          const newStock = Math.max(0, product.stock - productHarvest.quantityToHarvest);
+          
+          await updateProduct(product.id, {
+            ...product,
+            stock: newStock
+          });
+        }
+      }
+
+      // Recargar productos después de actualizar
+      await loadProducts();
+    } catch (error) {
+      console.error('Error al actualizar stock de productos:', error);
+      throw new Error('Error al actualizar stock de productos: ' + error.message);
+    }
+  }, [products, updateProduct, loadProducts]);
+
   // Guardar cosecha (nueva o editada)
   const handleSaveHarvest = useCallback(async (harvestData) => {
     try {
+      let savedHarvestId;
+      
       if (dialogType === 'add-harvest') {
         // Crear nueva cosecha
-        await addHarvest(harvestData);
+        savedHarvestId = await addHarvest(harvestData);
       } else if (dialogType === 'edit-harvest' && selectedHarvest) {
         // Actualizar cosecha existente
-        await updateHarvest(selectedHarvest.id, harvestData);
+        savedHarvestId = await updateHarvest(selectedHarvest.id, harvestData);
+      }
+
+      // Si hay productos para cosechar y el estado es 'completado', actualizar stock
+      if (harvestData.status === 'completed' && harvestData.productsToHarvest && harvestData.productsToHarvest.length > 0) {
+        await updateProductStock(harvestData.productsToHarvest);
       }
       
       setDialogOpen(false);
@@ -226,14 +266,20 @@ const useHarvestsController = () => {
       setError('Error al guardar cosecha: ' + err.message);
       throw err;
     }
-  }, [dialogType, selectedHarvest, addHarvest, updateHarvest, loadHarvests]);
+  }, [dialogType, selectedHarvest, addHarvest, updateHarvest, loadHarvests, updateProductStock]);
 
   // Completar cosecha
   const handleCompleteHarvestSubmit = useCallback(async (harvestData) => {
     try {
       if (!selectedHarvest) return;
       
+      // Completar la cosecha
       await completeHarvest(selectedHarvest.id, harvestData);
+
+      // Si la cosecha original tenía productos para cosechar, actualizar el stock
+      if (selectedHarvest.productsToHarvest && selectedHarvest.productsToHarvest.length > 0) {
+        await updateProductStock(selectedHarvest.productsToHarvest);
+      }
       
       setDialogOpen(false);
       await loadHarvests();
@@ -243,7 +289,7 @@ const useHarvestsController = () => {
       setError('Error al completar cosecha: ' + err.message);
       throw err;
     }
-  }, [selectedHarvest, completeHarvest, loadHarvests]);
+  }, [selectedHarvest, completeHarvest, loadHarvests, updateProductStock]);
 
   // Cambiar filtros
   const handleFilterChange = useCallback((filterName, value) => {
@@ -297,6 +343,8 @@ const useHarvestsController = () => {
   return {
     harvests: filteredHarvestsList,
     fields,
+    products,
+    warehouses,
     loading,
     error,
     selectedHarvest,
