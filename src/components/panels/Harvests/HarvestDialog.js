@@ -1,7 +1,7 @@
-// src/components/panels/Harvests/HarvestDialog.js - Actualizado con selección de productos
+// src/components/panels/Harvests/HarvestDialog.js - Formulario para añadir/editar cosechas
 import React, { useState, useEffect } from 'react';
 
-const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products, warehouses, isNew, onSave, onClose }) => {
+const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, isNew, onSave, onClose }) => {
   // Estado inicial para el formulario
   const [formData, setFormData] = useState({
     field: { id: '', name: '' },
@@ -20,18 +20,10 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
     targetWarehouse: '',
     qualityParameters: [],
     notes: '',
-    // NUEVO: Productos a cosechar
-    productsToHarvest: [],
-    productFilter: {
-      level: 'field', // 'field', 'lot', 'warehouse'
-      selectedId: ''
-    }
   });
 
   // Estado para campos adicionales
   const [availableLots, setAvailableLots] = useState([]);
-  const [availableWarehouses, setAvailableWarehouses] = useState([]);
-  const [availableProducts, setAvailableProducts] = useState([]);
   const [showAllFields, setShowAllFields] = useState(!selectedField);
   const [machineryInput, setMachineryInput] = useState('');
   const [qualityParamInput, setQualityParamInput] = useState({ name: '', value: '', unit: '' });
@@ -57,11 +49,6 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
         targetWarehouse: harvest.targetWarehouse || '',
         qualityParameters: harvest.qualityParameters || [],
         notes: harvest.notes || '',
-        productsToHarvest: harvest.productsToHarvest || [],
-        productFilter: {
-          level: 'field',
-          selectedId: harvest.field?.id || ''
-        }
       });
       
       // Si hay un campo seleccionado, cargar sus lotes
@@ -69,8 +56,6 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
         const field = fields.find(f => f.id === harvest.field.id);
         if (field) {
           setAvailableLots(field.lots || []);
-          loadWarehousesForField(field.id);
-          loadProductsForFilter('field', field.id);
         }
       }
     } else if (selectedField) {
@@ -84,20 +69,15 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
           lots: selectedLots || [],
           totalArea: calculateTotalArea(selectedLots || []),
           areaUnit: field.areaUnit || 'ha',
-          crop: field.crops && field.crops.length > 0 ? field.crops[0] : '',
-          productFilter: {
-            level: 'field',
-            selectedId: field.id
-          }
+          // Si el campo tiene cultivos, usar el primero como predeterminado
+          crop: field.crops && field.crops.length > 0 ? field.crops[0] : ''
         }));
         
         setAvailableLots(field.lots || []);
         setShowAllFields(false);
-        loadWarehousesForField(field.id);
-        loadProductsForFilter('field', field.id);
       }
     }
-  }, [harvest, isNew, fields, selectedField, selectedLots, products]);
+  }, [harvest, isNew, fields, selectedField, selectedLots]);
 
   // Formatear fecha para input de tipo date
   const formatDateForInput = (date) => {
@@ -120,58 +100,6 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
     }, 0);
   };
 
-  // Cargar almacenes para un campo específico
-  const loadWarehousesForField = (fieldId) => {
-    if (!fieldId) {
-      setAvailableWarehouses([]);
-      return;
-    }
-    
-    const fieldWarehouses = warehouses.filter(w => w.fieldId === fieldId);
-    setAvailableWarehouses(fieldWarehouses);
-  };
-
-  // Cargar productos según el filtro seleccionado
-  const loadProductsForFilter = (level, selectedId) => {
-    if (!selectedId) {
-      setAvailableProducts([]);
-      return;
-    }
-
-    let filteredProducts = [];
-
-    // Filtrar productos que son cosechables (semillas, cultivos)
-    const harvestableCategories = ['semilla', 'fertilizante', 'pesticida'];
-    
-    switch (level) {
-      case 'field':
-        filteredProducts = products.filter(p => 
-          p.fieldId === selectedId && 
-          p.stock > 0 &&
-          harvestableCategories.includes(p.category)
-        );
-        break;
-      case 'lot':
-        filteredProducts = products.filter(p => 
-          p.lotId === selectedId && 
-          p.stock > 0 &&
-          harvestableCategories.includes(p.category)
-        );
-        break;
-      case 'warehouse':
-        filteredProducts = products.filter(p => 
-          p.warehouseId === selectedId && 
-          p.stock > 0 &&
-          harvestableCategories.includes(p.category)
-        );
-        break;
-      default:
-        filteredProducts = [];
-    }
-
-    setAvailableProducts(filteredProducts);
-  };
-
   // Manejar cambio de campo seleccionado
   const handleFieldChange = (e) => {
     const fieldId = e.target.value;
@@ -183,72 +111,53 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
           ...prev,
           field: { id: selectedField.id, name: selectedField.name },
           fieldId: selectedField.id,
+          // Limpiar lotes seleccionados al cambiar de campo
           lots: [],
           totalArea: 0,
           areaUnit: selectedField.areaUnit || 'ha',
+          // Si el campo tiene cultivos, usar el primero como predeterminado
           crop: selectedField.crops && selectedField.crops.length > 0 
             ? selectedField.crops[0] 
-            : prev.crop,
-          productsToHarvest: [], // Limpiar productos seleccionados
-          productFilter: { level: 'field', selectedId: fieldId }
+            : prev.crop
         }));
         
+        // Actualizar lotes disponibles
         setAvailableLots(selectedField.lots || []);
-        loadWarehousesForField(fieldId);
-        loadProductsForFilter('field', fieldId);
         
+        // Limpiar errores de campo
         if (errors.fieldId) {
           setErrors(prev => ({ ...prev, fieldId: '' }));
         }
       }
     } else {
+      // Si no se selecciona ningún campo
       setFormData(prev => ({
         ...prev,
         field: { id: '', name: '' },
         fieldId: '',
         lots: [],
-        totalArea: 0,
-        productsToHarvest: [],
-        productFilter: { level: 'field', selectedId: '' }
+        totalArea: 0
       }));
       setAvailableLots([]);
-      setAvailableWarehouses([]);
-      setAvailableProducts([]);
-    }
-  };
-
-  // Manejar cambio en filtro de productos
-  const handleProductFilterChange = (field, value) => {
-    const newFilter = { ...formData.productFilter, [field]: value };
-    
-    setFormData(prev => ({
-      ...prev,
-      productFilter: newFilter,
-      productsToHarvest: [] // Limpiar productos seleccionados
-    }));
-
-    if (field === 'level') {
-      // Si cambia el nivel, limpiar la selección
-      newFilter.selectedId = '';
-      setAvailableProducts([]);
-    } else if (field === 'selectedId') {
-      // Si cambia la selección, cargar productos
-      loadProductsForFilter(newFilter.level, value);
     }
   };
 
   // Manejar selección/deselección de lotes
   const handleLotToggle = (lot) => {
     setFormData(prev => {
+      // Verificar si el lote ya está seleccionado
       const isSelected = prev.lots.some(l => l.id === lot.id);
       
       let updatedLots;
       if (isSelected) {
+        // Quitar el lote si ya estaba seleccionado
         updatedLots = prev.lots.filter(l => l.id !== lot.id);
       } else {
+        // Añadir el lote si no estaba seleccionado
         updatedLots = [...prev.lots, lot];
       }
       
+      // Recalcular superficie total
       const totalArea = calculateTotalArea(updatedLots);
       
       return {
@@ -258,45 +167,10 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
       };
     });
     
+    // Limpiar errores de lotes
     if (errors.lots) {
       setErrors(prev => ({ ...prev, lots: '' }));
     }
-  };
-
-  // Manejar selección de productos
-  const handleProductToggle = (product) => {
-    setFormData(prev => {
-      const isSelected = prev.productsToHarvest.some(p => p.id === product.id);
-      
-      let updatedProducts;
-      if (isSelected) {
-        updatedProducts = prev.productsToHarvest.filter(p => p.id !== product.id);
-      } else {
-        // Añadir producto con cantidad a cosechar
-        updatedProducts = [...prev.productsToHarvest, {
-          ...product,
-          quantityToHarvest: 0,
-          maxQuantity: product.stock
-        }];
-      }
-      
-      return {
-        ...prev,
-        productsToHarvest: updatedProducts
-      };
-    });
-  };
-
-  // Manejar cambio en cantidad a cosechar
-  const handleQuantityChange = (productId, quantity) => {
-    setFormData(prev => ({
-      ...prev,
-      productsToHarvest: prev.productsToHarvest.map(p => 
-        p.id === productId 
-          ? { ...p, quantityToHarvest: Math.min(Math.max(0, Number(quantity)), p.maxQuantity) }
-          : p
-      )
-    }));
   };
 
   // Manejar cambios generales en el formulario
@@ -352,6 +226,20 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
     }));
   };
 
+  // Manejar cambio en input de maquinaria
+  const handleMachineryKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddMachinery();
+    }
+  };
+
+  // Manejar cambio en inputs de parámetros de calidad
+  const handleQualityParamChange = (e) => {
+    const { name, value } = e.target;
+    setQualityParamInput(prev => ({ ...prev, [name]: value }));
+  };
+
   // Validar formulario antes de guardar
   const validateForm = () => {
     const newErrors = {};
@@ -370,17 +258,6 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
     
     if (!formData.plannedDate) {
       newErrors.plannedDate = 'La fecha planificada es obligatoria';
-    }
-
-    // Validar productos a cosechar
-    if (formData.productsToHarvest.length > 0) {
-      const hasInvalidQuantities = formData.productsToHarvest.some(p => 
-        p.quantityToHarvest <= 0 || p.quantityToHarvest > p.maxQuantity
-      );
-      
-      if (hasInvalidQuantities) {
-        newErrors.productsToHarvest = 'Las cantidades a cosechar deben ser válidas';
-      }
     }
     
     if (formData.estimatedYield && isNaN(Number(formData.estimatedYield))) {
@@ -585,125 +462,6 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
               )}
             </div>
             
-            {/* NUEVA SECCIÓN: Selección de productos a cosechar */}
-            <div className="form-section">
-              <h3 className="section-title">Productos a cosechar</h3>
-              
-              <div className="product-filter-container">
-                <div className="form-row">
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Filtrar productos por:</label>
-                    <select
-                      className="form-control"
-                      value={formData.productFilter.level}
-                      onChange={(e) => handleProductFilterChange('level', e.target.value)}
-                      style={{ height: 'auto', minHeight: '40px', paddingTop: '8px', paddingBottom: '8px' }}
-                      disabled={submitting}
-                    >
-                      <option value="field">Campo completo</option>
-                      <option value="lot">Lote específico</option>
-                      <option value="warehouse">Almacén específico</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Seleccionar:</label>
-                    <select
-                      className="form-control"
-                      value={formData.productFilter.selectedId}
-                      onChange={(e) => handleProductFilterChange('selectedId', e.target.value)}
-                      style={{ height: 'auto', minHeight: '40px', paddingTop: '8px', paddingBottom: '8px' }}
-                      disabled={submitting}
-                    >
-                      <option value="">Seleccionar {formData.productFilter.level}</option>
-                      {formData.productFilter.level === 'field' && fields.map(field => (
-                        <option key={field.id} value={field.id}>{field.name}</option>
-                      ))}
-                      {formData.productFilter.level === 'lot' && availableLots.map(lot => (
-                        <option key={lot.id} value={lot.id}>{lot.name}</option>
-                      ))}
-                      {formData.productFilter.level === 'warehouse' && availableWarehouses.map(warehouse => (
-                        <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Lista de productos disponibles */}
-              {availableProducts.length > 0 ? (
-                <div className="products-selection">
-                  <div className="products-selection-header">
-                    <span className="selection-label">Productos disponibles para cosechar</span>
-                    <span className="selection-counter">
-                      {formData.productsToHarvest.length} seleccionados
-                    </span>
-                  </div>
-                  
-                  <div className="products-grid">
-                    {availableProducts.map((product) => {
-                      const isSelected = formData.productsToHarvest.some(p => p.id === product.id);
-                      const selectedProduct = formData.productsToHarvest.find(p => p.id === product.id);
-                      
-                      return (
-                        <div 
-                          key={product.id} 
-                          className={`product-item ${isSelected ? 'selected' : ''}`}
-                        >
-                          <div className="product-checkbox">
-                            <input 
-                              type="checkbox" 
-                              checked={isSelected}
-                              onChange={() => handleProductToggle(product)}
-                              disabled={submitting}
-                            />
-                          </div>
-                          <div className="product-info">
-                            <div className="product-name">{product.name}</div>
-                            <div className="product-details">
-                              <span>Stock: {product.stock} {product.unit}</span>
-                              <span>Almacenamiento: {product.storageType}</span>
-                              {product.lotNumber && <span>Lote: {product.lotNumber}</span>}
-                            </div>
-                            
-                            {isSelected && (
-                              <div className="quantity-input">
-                                <label>Cantidad a cosechar:</label>
-                                <div className="quantity-controls">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={product.stock}
-                                    step="0.01"
-                                    value={selectedProduct?.quantityToHarvest || 0}
-                                    onChange={(e) => handleQuantityChange(product.id, e.target.value)}
-                                    className="form-control"
-                                    disabled={submitting}
-                                  />
-                                  <span className="unit-label">{product.unit}</span>
-                                </div>
-                                <span className="max-quantity">Máximo: {product.stock} {product.unit}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : formData.productFilter.selectedId ? (
-                <div className="empty-products-message">
-                  <p>No hay productos cosechables disponibles en la ubicación seleccionada.</p>
-                </div>
-              ) : (
-                <div className="select-location-message">
-                  <p>Seleccione una ubicación para ver los productos disponibles.</p>
-                </div>
-              )}
-              
-              {errors.productsToHarvest && <div className="invalid-feedback">{errors.productsToHarvest}</div>}
-            </div>
-            
             {/* Sección de rendimiento y métodos */}
             <div className="form-section">
               <h3 className="section-title">Rendimiento y método de cosecha</h3>
@@ -773,7 +531,7 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
                     className="form-control"
                     value={machineryInput}
                     onChange={(e) => setMachineryInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddMachinery())}
+                    onKeyDown={handleMachineryKeyDown}
                     placeholder="Añadir maquinaria"
                     disabled={submitting}
                   />
@@ -853,7 +611,7 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
                     name="name"
                     className="form-control"
                     value={qualityParamInput.name}
-                    onChange={(e) => setQualityParamInput(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={handleQualityParamChange}
                     placeholder="Parámetro"
                     disabled={submitting}
                   />
@@ -863,7 +621,7 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
                     name="value"
                     className="form-control"
                     value={qualityParamInput.value}
-                    onChange={(e) => setQualityParamInput(prev => ({ ...prev, value: e.target.value }))}
+                    onChange={handleQualityParamChange}
                     placeholder="Valor"
                     disabled={submitting}
                   />
@@ -873,7 +631,7 @@ const HarvestDialog = ({ harvest, fields, selectedField, selectedLots, products,
                     name="unit"
                     className="form-control"
                     value={qualityParamInput.unit}
-                    onChange={(e) => setQualityParamInput(prev => ({ ...prev, unit: e.target.value }))}
+                    onChange={handleQualityParamChange}
                     placeholder="Unidad"
                     disabled={submitting}
                   />

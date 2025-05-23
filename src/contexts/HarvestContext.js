@@ -1,4 +1,4 @@
-// src/contexts/HarvestContext.js - Contexto para gestión de cosechas
+// src/contexts/HarvestContext.js - Contexto para gestión de cosechas con productos
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
@@ -11,7 +11,8 @@ import {
   orderBy,
   where,
   serverTimestamp,
-  Timestamp 
+  Timestamp,
+  runTransaction
 } from 'firebase/firestore';
 import { db } from '../api/firebase';
 import { useAuth } from './AuthContext';
@@ -68,6 +69,9 @@ export function HarvestProvider({ children }) {
           qualityResults: harvestData.qualityResults || [],
           notes: harvestData.notes || '',
           harvestNotes: harvestData.harvestNotes || '',
+          // Nuevos campos para productos
+          selectedProducts: harvestData.selectedProducts || [],
+          productsHarvested: harvestData.productsHarvested || [],
           createdAt: harvestData.createdAt,
           updatedAt: harvestData.updatedAt
         });
@@ -142,6 +146,9 @@ export function HarvestProvider({ children }) {
         targetWarehouse: harvestData.targetWarehouse || '',
         qualityParameters: harvestData.qualityParameters || [],
         notes: harvestData.notes || '',
+        // Nuevos campos para productos
+        selectedProducts: harvestData.selectedProducts || [],
+        productsHarvested: [], // Se llenará al completar la cosecha
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -225,46 +232,76 @@ export function HarvestProvider({ children }) {
     }
   }, [loadHarvests]);
 
-  // Completar una cosecha
+  // Completar una cosecha - ACTUALIZADO para manejar productos
   const completeHarvest = useCallback(async (harvestId, harvestResults) => {
     try {
       setError('');
       
-      // Obtener la cosecha actual
-      const harvestDoc = doc(db, 'harvests', harvestId);
-      
-      // Datos para la actualización
-      const updateData = {
-        status: 'completed',
-        updatedAt: serverTimestamp()
-      };
-      
-      // Añadir los resultados de la cosecha
-      if (harvestResults) {
-        // Convertir la fecha de cosecha
-        if (harvestResults.harvestDate) {
-          if (harvestResults.harvestDate instanceof Date) {
-            updateData.harvestDate = Timestamp.fromDate(harvestResults.harvestDate);
+      // Usar transacción para asegurar consistencia
+      await runTransaction(db, async (transaction) => {
+        // Obtener la cosecha actual
+        const harvestRef = doc(db, 'harvests', harvestId);
+        const harvestDoc = await transaction.get(harvestRef);
+        
+        if (!harvestDoc.exists()) {
+          throw new Error('La cosecha no existe');
+        }
+        
+        const harvestData = harvestDoc.data();
+        
+        // Datos para la actualización de la cosecha
+        const updateData = {
+          status: 'completed',
+          updatedAt: serverTimestamp()
+        };
+        
+        // Añadir los resultados de la cosecha
+        if (harvestResults) {
+          // Convertir la fecha de cosecha
+          if (harvestResults.harvestDate) {
+            if (harvestResults.harvestDate instanceof Date) {
+              updateData.harvestDate = Timestamp.fromDate(harvestResults.harvestDate);
+            }
+          }
+          
+          // Otros campos de resultados
+          updateData.actualYield = harvestResults.actualYield || 0;
+          updateData.totalHarvested = harvestResults.totalHarvested || null;
+          updateData.totalHarvestedUnit = harvestResults.totalHarvestedUnit || 'kg';
+          updateData.destination = harvestResults.destination || '';
+          updateData.qualityResults = harvestResults.qualityResults || [];
+          updateData.harvestNotes = harvestResults.harvestNotes || '';
+          updateData.productsHarvested = harvestResults.productsHarvested || [];
+        }
+        
+        // Actualizar stock de productos cosechados
+        if (harvestData.selectedProducts && harvestData.selectedProducts.length > 0) {
+          for (const selectedProduct of harvestData.selectedProducts) {
+            const productRef = doc(db, 'products', selectedProduct.productId);
+            const productDoc = await transaction.get(productRef);
+            
+            if (productDoc.exists()) {
+              const productData = productDoc.data();
+              const currentStock = productData.stock || 0;
+              const quantityToHarvest = selectedProduct.quantity || 0;
+              
+              // Verificar que hay suficiente stock
+              if (currentStock >= quantityToHarvest) {
+                const newStock = currentStock - quantityToHarvest;
+                transaction.update(productRef, {
+                  stock: newStock,
+                  updatedAt: serverTimestamp()
+                });
+              } else {
+                throw new Error(`No hay suficiente stock del producto ${productData.name}. Stock disponible: ${currentStock}, requerido: ${quantityToHarvest}`);
+              }
+            }
           }
         }
         
-        // Otros campos de resultados
-        updateData.actualYield = harvestResults.actualYield || 0;
-        updateData.totalHarvested = harvestResults.totalHarvested || null;
-        updateData.totalHarvestedUnit = harvestResults.totalHarvestedUnit || 'kg';
-        updateData.destination = harvestResults.destination || '';
-        updateData.qualityResults = harvestResults.qualityResults || [];
-        updateData.harvestNotes = harvestResults.harvestNotes || '';
-      }
-      
-      // Actualizar la cosecha
-      await updateDoc(harvestDoc, updateData);
-      
-      // Si se especificó un almacén destino, podríamos añadir el producto al inventario
-      // Esta parte se implementaría en integración con el contexto de stock
-      // if (harvestResults.destination && harvestResults.totalHarvested > 0) {
-      //   // Aquí iría la lógica para actualizar el inventario
-      // }
+        // Actualizar la cosecha
+        transaction.update(harvestRef, updateData);
+      });
       
       // Recargar cosechas
       await loadHarvests();
