@@ -8,6 +8,8 @@ const Harvests = () => {
   const {
     harvests,
     fields,
+    warehouses,
+    products, // Incluir productos del controlador
     loading,
     error,
     selectedHarvest,
@@ -34,6 +36,8 @@ const Harvests = () => {
     <HarvestsPanel
       harvests={harvests}
       fields={fields}
+      warehouses={warehouses}
+      products={products} // Pasar productos al panel
       loading={loading}
       error={error}
       selectedHarvest={selectedHarvest}

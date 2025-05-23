@@ -1,7 +1,7 @@
-// src/components/panels/Harvests/HarvestDetailDialog.js - Visualización detallada de una cosecha
+// src/components/panels/Harvests/HarvestDetailDialog.js - Visualización detallada de una cosecha con productos
 import React from 'react';
 
-const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarvest, onDeleteHarvest }) => {
+const HarvestDetailDialog = ({ harvest, fields, warehouses, products, onClose, onEditHarvest, onCompleteHarvest, onDeleteHarvest }) => {
   // Formatear fecha
   const formatDate = (date) => {
     if (!date) return 'No especificada';
@@ -51,10 +51,16 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
     return <span className={`chip ${chipClass}`}>{statusText}</span>;
   };
 
-  // Función para verificar si la cosecha se puede editar (solo si está pendiente o programada)
+  // Función para obtener información del producto
+  const getProductInfo = (productId) => {
+    const product = products?.find(p => p.id === productId);
+    return product || { name: 'Producto desconocido', unit: '', stock: 0 };
+  };
+
+  // Función para verificar si la cosecha se puede editar
   const canEdit = harvest.status === 'pending' || harvest.status === 'scheduled';
   
-  // Función para verificar si la cosecha se puede completar (no si ya está completada o cancelada)
+  // Función para verificar si la cosecha se puede completar
   const canComplete = harvest.status !== 'completed' && harvest.status !== 'cancelled';
 
   return (
@@ -74,9 +80,9 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
           <div className="harvest-summary">
             <div className="harvest-summary-header">
               <div className="harvest-summary-title">
-                <i className="fas fa-leaf"></i>
+                <i className="fas fa-tractor"></i>
                 <span>
-                  {harvest.crop} en {harvest.field.name}
+                  Cosecha en {harvest.field?.name || 'Campo desconocido'}
                 </span>
               </div>
               <div className="harvest-summary-stats">
@@ -88,18 +94,10 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
                   <div className="summary-stat-value">{harvest.lots?.length || 0}</div>
                   <div className="summary-stat-label">Lotes</div>
                 </div>
-                {harvest.estimatedYield && (
-                  <div className="summary-stat">
-                    <div className="summary-stat-value">{harvest.estimatedYield} {harvest.yieldUnit}</div>
-                    <div className="summary-stat-label">Rendimiento est.</div>
-                  </div>
-                )}
-                {harvest.status === 'completed' && harvest.actualYield && (
-                  <div className="summary-stat highlight">
-                    <div className="summary-stat-value">{harvest.actualYield} {harvest.yieldUnit}</div>
-                    <div className="summary-stat-label">Rendimiento real</div>
-                  </div>
-                )}
+                <div className="summary-stat">
+                  <div className="summary-stat-value">{harvest.selectedProducts?.length || 0}</div>
+                  <div className="summary-stat-label">Productos</div>
+                </div>
               </div>
             </div>
             
@@ -176,7 +174,6 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
                       <tr>
                         <th>Nombre</th>
                         <th>Superficie</th>
-                        <th>Cultivo</th>
                         <th>Estado</th>
                       </tr>
                     </thead>
@@ -185,11 +182,6 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
                         <tr key={lot.id}>
                           <td>{lot.name}</td>
                           <td>{lot.area} {lot.areaUnit || harvest.areaUnit}</td>
-                          <td>
-                            {lot.crops && lot.crops.length > 0 
-                              ? lot.crops[0] 
-                              : lot.currentCrop || 'No especificado'}
-                          </td>
                           <td>
                             <span className={`status-badge status-${lot.status || 'active'}`}>
                               {lot.status === 'active' && 'Activo'}
@@ -207,6 +199,81 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
                 </div>
               ) : (
                 <div className="empty-table-message">No hay lotes seleccionados</div>
+              )}
+            </div>
+
+            {/* Productos seleccionados */}
+            <div className="detail-section">
+              <h3 className="section-title">
+                <i className="fas fa-boxes"></i> Productos a cosechar
+              </h3>
+              
+              {harvest.selectedProducts && harvest.selectedProducts.length > 0 ? (
+                <div className="products-table-container">
+                  <table className="products-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad a cosechar</th>
+                        <th>Stock disponible</th>
+                        <th>Forma de almacenamiento</th>
+                        <th>Ubicación</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {harvest.selectedProducts.map((productItem, index) => {
+                        const productInfo = getProductInfo(productItem.productId);
+                        return (
+                          <tr key={index}>
+                            <td>
+                              <div className="product-name-cell">
+                                <div className="product-name">{productItem.name || productInfo.name}</div>
+                                {productItem.code && (
+                                  <div className="product-code">{productItem.code}</div>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="harvest-quantity">
+                                {productItem.harvestQuantity} {productItem.unit}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`stock-available ${productInfo.stock <= (productInfo.minStock || 0) ? 'stock-low' : 'stock-ok'}`}>
+                                {productInfo.stock} {productInfo.unit}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="storage-type">
+                                {productItem.storageType === 'bolsas' && 'Bolsas'}
+                                {productItem.storageType === 'suelto' && 'Suelto'}
+                                {productItem.storageType === 'unidad' && 'Por unidad'}
+                                {productItem.storageType === 'sacos' && 'Sacos'}
+                                {productItem.storageType === 'tambores' && 'Tambores'}
+                                {productItem.storageType === 'contenedores' && 'Contenedores'}
+                                {productItem.storageType === 'cajas' && 'Cajas'}
+                                {!productItem.storageType && 'No especificado'}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="location-info">
+                                <div className="field-name">{productItem.fieldName || harvest.field?.name}</div>
+                                {productItem.warehouseName && (
+                                  <div className="warehouse-name">{productItem.warehouseName}</div>
+                                )}
+                                {productItem.lotName && (
+                                  <div className="lot-name">Lote: {productItem.lotName}</div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-table-message">No hay productos seleccionados para cosechar</div>
               )}
             </div>
             
@@ -282,26 +349,10 @@ const HarvestDetailDialog = ({ harvest, onClose, onEditHarvest, onCompleteHarves
                     <span className="detail-value">{formatDate(harvest.harvestDate)}</span>
                   </div>
                   
-                  <div className="detail-item">
-                    <span className="detail-label">Rendimiento obtenido</span>
-                    <span className="detail-value highlight">
-                      {harvest.actualYield} {harvest.yieldUnit}
-                    </span>
-                  </div>
-                  
-                  {harvest.estimatedYield && (
-                    <div className="detail-item">
-                      <span className="detail-label">Diferencia con estimado</span>
-                      <span className="detail-value">
-                        {((harvest.actualYield / harvest.estimatedYield * 100) - 100).toFixed(2)}%
-                      </span>
-                    </div>
-                  )}
-                  
                   {harvest.totalHarvested && (
                     <div className="detail-item">
                       <span className="detail-label">Producción total</span>
-                      <span className="detail-value">
+                      <span className="detail-value highlight">
                         {harvest.totalHarvested} {harvest.totalHarvestedUnit || 'kg'}
                       </span>
                     </div>

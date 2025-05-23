@@ -1,4 +1,4 @@
-// src/components/panels/Harvests/HarvestsPanel.js - Panel completo de cosechas con la lupa reposicionada
+// src/components/panels/Harvests/HarvestsPanel.js - Panel completo de cosechas con integración de productos
 import React from 'react';
 import './harvests.css';
 import HarvestDialog from './HarvestDialog';
@@ -8,6 +8,8 @@ import CompleteHarvestDialog from './CompleteHarvestDialog';
 const HarvestsPanel = ({
   harvests,
   fields,
+  warehouses,
+  products, // Nuevo prop para productos
   loading,
   error,
   selectedHarvest,
@@ -75,6 +77,29 @@ const HarvestsPanel = ({
     return <span className={`chip ${chipClass}`}>{statusText}</span>;
   };
 
+  // Función para mostrar productos de la cosecha
+  const renderHarvestProducts = (harvest) => {
+    if (!harvest.selectedProducts || harvest.selectedProducts.length === 0) {
+      return <span className="no-products">Sin productos seleccionados</span>;
+    }
+
+    return (
+      <div className="harvest-products-summary">
+        {harvest.selectedProducts.slice(0, 3).map((productItem, index) => (
+          <div key={index} className="product-summary-chip">
+            <span className="product-name">{productItem.name}</span>
+            <span className="product-quantity">{productItem.harvestQuantity} {productItem.unit}</span>
+          </div>
+        ))}
+        {harvest.selectedProducts.length > 3 && (
+          <div className="product-summary-chip more-products">
+            +{harvest.selectedProducts.length - 3} más
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Mostrar cargando
   if (loading) {
     return (
@@ -107,7 +132,7 @@ const HarvestsPanel = ({
         </div>
       </div>
 
-      {/* Barra de filtros y búsqueda - MODIFICADO */}
+      {/* Barra de filtros y búsqueda */}
       <div className="filters-container">
         <div className="filters-group">
           <div className="filter-item">
@@ -119,22 +144,6 @@ const HarvestsPanel = ({
               style={{ height: 'auto', minHeight: '40px', paddingTop: '8px', paddingBottom: '8px' }}
             >
               {filterOptions.status.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="filter-item">
-            <label htmlFor="cropFilter">Cultivo:</label>
-            <select
-              id="cropFilter"
-              className="form-control"
-              onChange={(e) => onFilterChange('crop', e.target.value)}
-              style={{ height: 'auto', minHeight: '40px', paddingTop: '8px', paddingBottom: '8px' }}
-            >
-              {filterOptions.crops.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -185,7 +194,6 @@ const HarvestsPanel = ({
           </div>
         </div>
         
-        {/* AQUÍ ESTÁ LA MODIFICACIÓN DEL BUSCADOR - INICIO */}
         <div className="search-container">
           <div className="search-input-wrapper">
             <i className="fas fa-search search-icon"></i>
@@ -197,7 +205,6 @@ const HarvestsPanel = ({
             />
           </div>
         </div>
-        {/* AQUÍ ESTÁ LA MODIFICACIÓN DEL BUSCADOR - FIN */}
       </div>
 
       {/* Mostrar mensaje de error si existe */}
@@ -227,8 +234,10 @@ const HarvestsPanel = ({
               <div className="harvest-content">
                 <div className="harvest-details">
                   <div className="harvest-detail">
-                    <span className="detail-label">Cultivo</span>
-                    <span className="detail-value">{harvest.crop}</span>
+                    <span className="detail-label">Fecha planificada</span>
+                    <span className="detail-value">
+                      {formatDate(harvest.plannedDate)}
+                    </span>
                   </div>
                   
                   <div className="harvest-detail">
@@ -239,16 +248,16 @@ const HarvestsPanel = ({
                   </div>
                   
                   <div className="harvest-detail">
-                    <span className="detail-label">Fecha planificada</span>
+                    <span className="detail-label">Lotes</span>
                     <span className="detail-value">
-                      {formatDate(harvest.plannedDate)}
+                      {harvest.lots ? harvest.lots.length : 0} lotes seleccionados
                     </span>
                   </div>
                   
                   <div className="harvest-detail">
-                    <span className="detail-label">Lotes</span>
+                    <span className="detail-label">Productos</span>
                     <span className="detail-value">
-                      {harvest.lots ? harvest.lots.length : 0} lotes seleccionados
+                      {harvest.selectedProducts ? harvest.selectedProducts.length : 0} productos
                     </span>
                   </div>
                 </div>
@@ -276,30 +285,13 @@ const HarvestsPanel = ({
                     <p className="no-lots-message">No hay lotes seleccionados</p>
                   )}
                 </div>
-                
-                {/* Rendimiento esperado */}
-                <div className="harvest-yield">
-                  <div className="yield-item">
-                    <i className="fas fa-balance-scale"></i>
-                    <div className="yield-content">
-                      <div className="yield-value">
-                        {harvest.estimatedYield || 'N/A'} {harvest.yieldUnit || 'kg/ha'}
-                      </div>
-                      <div className="yield-label">Rendimiento esperado</div>
-                    </div>
+
+                {/* Productos seleccionados */}
+                <div className="harvest-products">
+                  <div className="products-header">
+                    <h4 className="products-title">Productos a cosechar</h4>
                   </div>
-                  
-                  {harvest.status === 'completed' && (
-                    <div className="yield-item">
-                      <i className="fas fa-check-circle"></i>
-                      <div className="yield-content">
-                        <div className="yield-value">
-                          {harvest.actualYield || 'N/A'} {harvest.yieldUnit || 'kg/ha'}
-                        </div>
-                        <div className="yield-label">Rendimiento real</div>
-                      </div>
-                    </div>
-                  )}
+                  {renderHarvestProducts(harvest)}
                 </div>
                 
                 <div className="harvest-actions">
@@ -364,7 +356,7 @@ const HarvestsPanel = ({
           </div>
           <h2 className="empty-title">No hay cosechas registradas</h2>
           <p className="empty-description">
-            Comienza añadiendo una nueva cosecha para gestionar la recolección de tus cultivos.
+            Comienza añadiendo una nueva cosecha para gestionar la recolección de tus productos.
           </p>
           <button className="btn btn-primary" onClick={onAddHarvest}>
             <i className="fas fa-plus"></i> Añadir cosecha
@@ -379,6 +371,8 @@ const HarvestsPanel = ({
             <HarvestDialog
               harvest={selectedHarvest}
               fields={fields}
+              warehouses={warehouses}
+              products={products} // Pasar productos al diálogo
               selectedField={selectedField}
               selectedLots={selectedLots}
               isNew={dialogType === 'add-harvest'}
@@ -388,6 +382,9 @@ const HarvestsPanel = ({
           ) : dialogType === 'view-harvest' ? (
             <HarvestDetailDialog
               harvest={selectedHarvest}
+              fields={fields}
+              warehouses={warehouses}
+              products={products} // Pasar productos al diálogo de detalles
               onClose={onCloseDialog}
               onEditHarvest={onEditHarvest}
               onCompleteHarvest={onCompleteHarvest}
