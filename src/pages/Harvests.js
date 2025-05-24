@@ -8,8 +8,8 @@ const Harvests = () => {
   const {
     harvests,
     fields,
+    products,
     warehouses,
-    products, // Incluir productos del controlador
     loading,
     error,
     selectedHarvest,
@@ -19,10 +19,11 @@ const Harvests = () => {
     dialogType,
     filterOptions,
     handleAddHarvest,
+    handleAddHarvestFromField,
     handleEditHarvest,
     handleViewHarvest,
-    handleDeleteHarvest,
     handleCompleteHarvest,
+    handleDeleteHarvest,
     handleSaveHarvest,
     handleCompleteHarvestSubmit,
     handleFilterChange,
@@ -36,8 +37,8 @@ const Harvests = () => {
     <HarvestsPanel
       harvests={harvests}
       fields={fields}
+      products={products}
       warehouses={warehouses}
-      products={products} // Pasar productos al panel
       loading={loading}
       error={error}
       selectedHarvest={selectedHarvest}
@@ -49,8 +50,8 @@ const Harvests = () => {
       onAddHarvest={handleAddHarvest}
       onEditHarvest={handleEditHarvest}
       onViewHarvest={handleViewHarvest}
-      onDeleteHarvest={handleDeleteHarvest}
       onCompleteHarvest={handleCompleteHarvest}
+      onDeleteHarvest={handleDeleteHarvest}
       onSaveHarvest={handleSaveHarvest}
       onCompleteHarvestSubmit={handleCompleteHarvestSubmit}
       onFilterChange={handleFilterChange}
